@@ -9,9 +9,11 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebViewClient;
 import android.webkit.ValueCallback;
 import android.webkit.JavascriptInterface;
+import android.webkit.ConsoleMessage;
 import android.content.Intent;
 import android.net.Uri;
 import android.util.Base64;
+import android.util.Log;
 import android.widget.Toast;
 
 import java.io.OutputStream;
@@ -35,15 +37,25 @@ public class MainActivity extends Activity {
         setContentView(webView);
 
         WebSettings settings = webView.getSettings();
+
+        // JavaScript and storage
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+
+        // Allow local HTML and JavaScript files
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(true);
 
+        // Android bridge for saving files
         webView.addJavascriptInterface(new AndroidBridge(), "Android");
+
         webView.setWebViewClient(new WebViewClient());
 
+        // File picker and JavaScript console
         webView.setWebChromeClient(new WebChromeClient() {
+
             @Override
             public boolean onShowFileChooser(
                     WebView view,
@@ -56,11 +68,35 @@ public class MainActivity extends Activity {
 
                 fileCallback = callback;
 
-                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                intent.addCategory(Intent.CATEGORY_OPENABLE);
-                intent.setType("application/pdf");
+                try {
+                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("application/pdf");
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-                startActivityForResult(intent, FILE_PICKER);
+                    startActivityForResult(intent, FILE_PICKER);
+
+                } catch (Exception e) {
+                    Log.e("InspectionTool", "File picker error", e);
+                    fileCallback.onReceiveValue(null);
+                    fileCallback = null;
+
+                    Toast.makeText(
+                        MainActivity.this,
+                        "Unable to open PDF picker",
+                        Toast.LENGTH_LONG
+                    ).show();
+                }
+
+                return true;
+            }
+
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage message) {
+                Log.d(
+                    "InspectionTool",
+                    message.message() + " — line " + message.lineNumber()
+                );
                 return true;
             }
         });
@@ -72,6 +108,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void saveBlob(String base64Data, String fileName) {
+
             try {
                 String cleanData =
                     base64Data.substring(base64Data.indexOf(",") + 1);
@@ -80,18 +117,20 @@ public class MainActivity extends Activity {
                 pendingFileName = fileName;
 
                 runOnUiThread(() -> {
+
                     try {
                         String mimeType = "application/octet-stream";
 
                         if (fileName.toLowerCase().endsWith(".pdf")) {
                             mimeType = "application/pdf";
-                        } else if (
-                            fileName.toLowerCase().endsWith(".xlsx")) {
+                        } else if (fileName.toLowerCase().endsWith(".xlsx")) {
                             mimeType =
                                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                         }
 
-                        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                        Intent intent =
+                            new Intent(Intent.ACTION_CREATE_DOCUMENT);
+
                         intent.addCategory(Intent.CATEGORY_OPENABLE);
                         intent.setType(mimeType);
                         intent.putExtra(Intent.EXTRA_TITLE, fileName);
@@ -99,41 +138,60 @@ public class MainActivity extends Activity {
                         startActivityForResult(intent, SAVE_FILE);
 
                     } catch (Exception e) {
-                        Toast.makeText(MainActivity.this,
+                        Log.e("InspectionTool", "Save picker error", e);
+
+                        Toast.makeText(
+                            MainActivity.this,
                             "Unable to open save location",
-                            Toast.LENGTH_LONG).show();
+                            Toast.LENGTH_LONG
+                        ).show();
                     }
                 });
 
             } catch (Exception e) {
-                Toast.makeText(MainActivity.this,
+                Log.e("InspectionTool", "File preparation error", e);
+
+                Toast.makeText(
+                    MainActivity.this,
                     "File preparation failed: " + e.getMessage(),
-                    Toast.LENGTH_LONG).show();
+                    Toast.LENGTH_LONG
+                ).show();
             }
         }
     }
 
     @Override
     protected void onActivityResult(
-            int requestCode, int resultCode, Intent data) {
+            int requestCode,
+            int resultCode,
+            Intent data) {
 
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (requestCode == FILE_PICKER && fileCallback != null) {
+        // PDF selection
+        if (requestCode == FILE_PICKER) {
+
             Uri[] results = null;
 
             if (resultCode == RESULT_OK &&
-                    data != null && data.getData() != null) {
+                    data != null &&
+                    data.getData() != null) {
+
                 results = new Uri[]{data.getData()};
             }
 
-            fileCallback.onReceiveValue(results);
-            fileCallback = null;
+            if (fileCallback != null) {
+                fileCallback.onReceiveValue(results);
+                fileCallback = null;
+            }
         }
 
+        // Save PDF or Excel
         if (requestCode == SAVE_FILE) {
+
             if (resultCode == RESULT_OK &&
-                    data != null && data.getData() != null) {
+                    data != null &&
+                    data.getData() != null) {
 
                 try {
                     Uri uri = data.getData();
@@ -149,20 +207,28 @@ public class MainActivity extends Activity {
                         output.flush();
                     }
 
-                    Toast.makeText(this,
+                    Toast.makeText(
+                        this,
                         "File saved successfully",
-                        Toast.LENGTH_LONG).show();
+                        Toast.LENGTH_LONG
+                    ).show();
 
                 } catch (Exception e) {
-                    Toast.makeText(this,
+                    Log.e("InspectionTool", "Save failed", e);
+
+                    Toast.makeText(
+                        this,
                         "Save failed: " + e.getMessage(),
-                        Toast.LENGTH_LONG).show();
+                        Toast.LENGTH_LONG
+                    ).show();
                 }
 
             } else {
-                Toast.makeText(this,
+                Toast.makeText(
+                    this,
                     "Save cancelled",
-                    Toast.LENGTH_SHORT).show();
+                    Toast.LENGTH_SHORT
+                ).show();
             }
 
             pendingBytes = null;
@@ -172,6 +238,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
         } else {
