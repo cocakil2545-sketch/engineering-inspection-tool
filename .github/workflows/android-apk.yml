@@ -23,6 +23,12 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Download matching PDF worker
+        run: |
+          curl -fL --retry 3 \
+            https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs \
+            -o app/src/main/assets/pdf.worker.min.mjs
+
       - name: Build debug APK
         run: gradle assembleDebug
 
