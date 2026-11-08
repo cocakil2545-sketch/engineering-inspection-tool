@@ -384,4 +384,109 @@ $("pdfBtn").onclick=async()=>{
     });
    }
   }
-  const bytes=await out.save();download
+  const bytes=await out.save();download(new Blob([bytes],{type:"application/pdf"}),sourceName+"_BALLOONED.pdf");
+  progress(100,"Ballooned PDF downloaded — all original sheets retained in order.");
+ }catch(e){console.error(e);progress(0,"PDF export error: "+e.message)}
+};
+
+$("xlsxBtn").onclick=async()=>{
+ if(!ready)return;
+ try{
+  progress(70,"Building inspection workbook…");
+  await script("./exceljs.min.js");
+  const wb=new ExcelJS.Workbook();
+  wb.creator="Engineering Drawing Balloon & Inspection Tool";
+
+  const tr=wb.addWorksheet("Traceability");
+  tr.addRow(["DRAWING TRACEABILITY — VERIFY BEFORE EXPORT"]);
+  tr.addRow(["Source PDF","PDF Sheet","Part Name","Part No.","Drawing No.","Revision","Status"]);
+  detectedMeta.forEach(m=>{
+   const status=[m.partName,m.partNo,m.drawingNo,m.revision].some(v=>v==="Needs Confirmation")?"Needs Confirmation":"OK";
+   tr.addRow([m.sourcePDF,m.sheet,m.partName,m.partNo,m.drawingNo,m.revision,status]);
+  });
+  tr.getRow(1).font={bold:true,size:16};
+  tr.getRow(2).font={bold:true};
+  tr.mergeCells("A1:G1");
+  tr.columns=[{width:32},{width:14},{width:28},{width:22},{width:22},{width:14},{width:20}];
+  tr.views=[{state:"frozen",ySplit:2}];
+
+  sheets.forEach((s,i)=>{
+   const m=detectedMeta[i];
+   const ws=wb.addWorksheet(uniqueSheetName(wb,m.partNo,i+1));
+   ws.mergeCells("A1:J1");
+   ws.getCell("A1").value="ENGINEERING DRAWING INSPECTION REPORT";
+   ws.getCell("A1").font={bold:true,size:16};
+
+   const metadata=[
+    ["Part Name",m.partName],["Part No.",m.partNo],
+    ["Drawing No.",m.drawingNo],["Revision",m.revision],
+    ["Source PDF",m.sourcePDF],["PDF Sheet",m.sheet]
+   ];
+   metadata.forEach((row,idx)=>{
+    const r=ws.getRow(idx+2);
+    r.getCell(1).value=row[0];
+    r.getCell(2).value=row[1];
+    r.getCell(1).font={bold:true};
+    r.getCell(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"E8F1EB"}};
+    r.getCell(2).font={bold:true};
+    if(row[1]==="Needs Confirmation")
+     r.getCell(2).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF2CC"}};
+   });
+
+   ws.addRow([]);
+   const headerRow=ws.addRow([
+    "Balloon No","Characteristic","Nominal","Unit","+ Tol","- Tol",
+    "Upper Limit","Lower Limit","Actual","Result"
+   ]);
+   headerRow.font={bold:true};
+   headerRow.fill={type:"pattern",pattern:"solid",fgColor:{argb:"E8F1EB"}};
+
+   s.dimensions.forEach(d=>{
+    ws.addRow([d.no,d.type+" — "+d.raw,d.nominal,d.unit,d.plus,d.minus,d.upper,d.lower,"",""]);
+   });
+   ws.columns=[
+    {width:13},{width:34},{width:12},{width:10},{width:10},
+    {width:10},{width:14},{width:14},{width:14},{width:14}
+   ];
+   ws.views=[{state:"frozen",ySplit:9}];
+  });
+
+  const bytes=await wb.xlsx.writeBuffer();
+  download(new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),sourceName+"_INSPECTION_REPORT.xlsx");
+  progress(100,"Inspection Excel downloaded with drawing metadata and traceability.");
+ }catch(e){console.error(e);progress(0,"Excel export error: "+e.message)}
+};
+
+function esc(s){
+ return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+function script(src){
+ return new Promise((ok,no)=>{
+  const s=document.createElement("script");
+  s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s);
+ });
+}
+function download(blob,name){
+ if(window.Android && typeof Android.saveBlob==="function"){
+  blob.arrayBuffer().then(buffer=>{
+   const bytes=new Uint8Array(buffer);
+   let binary="";
+   const chunk=0x8000;
+   for(let i=0;i<bytes.length;i+=chunk)
+    binary+=String.fromCharCode(...bytes.subarray(i,i+chunk));
+   Android.saveBlob("data:"+(blob.type||"application/octet-stream")+";base64,"+btoa(binary),name);
+  }).catch(error=>{
+   console.error(error);
+   alert("Could not save file: "+error.message);
+  });
+  return;
+ }
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");
+ a.href=url;a.download=name;
+ document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+</script>
+</body>
+</html>
