@@ -72,8 +72,8 @@ table{border-collapse:collapse;width:100%;font-size:11px;background:white;margin
 </main>
 
 <script type="module">
-import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
-pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+import * as pdfjsLib from "./pdf.min.js";
+pdfjsLib.GlobalWorkerOptions.workerSrc="./pdf.worker.min.mjs";
 
 let pdfDoc=null, sourceBytes=null, sourceName="", sheets=[], ready=false, detectedMeta=[];
 const $=x=>document.getElementById(x);
@@ -225,8 +225,6 @@ function renderTraceability(){
 }
 
 function placeBalloon(d, index, pageW, pageH, scale){
- // Keep the balloon away from the dimension text and connect it with a leader line.
- // The actual dimension remains the target point; the balloon is only the identifier.
  const gap=Math.max(34,Math.min(75,Math.min(pageW,pageH)*0.055));
  const side=(index%2===0)?1:-1;
  const vertical=(index%4<2)?-1:1;
@@ -336,7 +334,7 @@ $("pdfBtn").onclick=async()=>{
  if(!ready)return;
  try{
   progress(70,"Building ballooned PDF…");
-  await script("https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js");
+  await script("./pdf-lib.min.js");
   const out=await PDFLib.PDFDocument.load(sourceBytes.slice()), pages=out.getPages();
   const font=await out.embedFont(PDFLib.StandardFonts.HelveticaBold);
   for(const s of sheets){
@@ -347,14 +345,10 @@ $("pdfBtn").onclick=async()=>{
     const side=(i%2===0)?1:-1;
     const vertical=(i%4<2)?1:-1;
 
-    // Keep the balloon clearly away from the dimension and connect it to
-    // the exact dimension anchor. Coordinates here are PDF bottom-left.
     let bx=x+side*gap, by=y+vertical*gap*0.55;
     bx=Math.max(20,Math.min(width-20,bx));
     by=Math.max(20,Math.min(height-20,by));
 
-    // Make the leader stop at the edge of the balloon instead of running
-    // through its centre.
     const dx=x-bx, dy=y-by, dist=Math.sqrt(dx*dx+dy*dy)||1;
     const edgeX=bx+dx*(13/dist), edgeY=by+dy*(13/dist);
 
@@ -365,7 +359,6 @@ $("pdfBtn").onclick=async()=>{
       color:PDFLib.rgb(0.84,0.04,0.09)
     });
 
-    // Small arrowhead at the exact dimension target.
     const ux=(x-bx)/dist, uy=(y-by)/dist, al=7, aw=3.5;
     pg.drawLine({
       start:{x:x,y:y},
@@ -391,129 +384,4 @@ $("pdfBtn").onclick=async()=>{
     });
    }
   }
-  const bytes=await out.save();download(new Blob([bytes],{type:"application/pdf"}),sourceName+"_BALLOONED.pdf");
-  progress(100,"Ballooned PDF downloaded — all original sheets retained in order.");
- }catch(e){console.error(e);progress(0,"PDF export error: "+e.message)}
-};
-
-$("xlsxBtn").onclick=async()=>{
- if(!ready)return;
- try{
-  progress(70,"Building inspection workbook…");
-  await script("https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js");
-  const wb=new ExcelJS.Workbook();
-  wb.creator="Engineering Drawing Balloon & Inspection Tool";
-
-  // First sheet: verification/traceability table.
-  const tr=wb.addWorksheet("Traceability");
-  tr.addRow(["DRAWING TRACEABILITY — VERIFY BEFORE EXPORT"]);
-  tr.addRow(["Source PDF","PDF Sheet","Part Name","Part No.","Drawing No.","Revision","Status"]);
-  detectedMeta.forEach(m=>{
-   const status=[m.partName,m.partNo,m.drawingNo,m.revision].some(v=>v==="Needs Confirmation")?"Needs Confirmation":"OK";
-   tr.addRow([m.sourcePDF,m.sheet,m.partName,m.partNo,m.drawingNo,m.revision,status]);
-  });
-  tr.getRow(1).font={bold:true,size:16};
-  tr.getRow(2).font={bold:true};
-  tr.mergeCells("A1:G1");
-  tr.columns=[
-   {width:32},{width:14},{width:28},{width:22},{width:22},{width:14},{width:20}
-  ];
-  tr.views=[{state:"frozen",ySplit:2}];
-
-  // One worksheet for every PDF sheet/part.
-  sheets.forEach((s,i)=>{
-   const m=detectedMeta[i];
-   const ws=wb.addWorksheet(uniqueSheetName(wb,m.partNo,i+1));
-
-   ws.mergeCells("A1:J1");
-   ws.getCell("A1").value="ENGINEERING DRAWING INSPECTION REPORT";
-   ws.getCell("A1").font={bold:true,size:16};
-
-   // Explicit drawing metadata block.
-   const metadata=[
-    ["Part Name",m.partName],
-    ["Part No.",m.partNo],
-    ["Drawing No.",m.drawingNo],
-    ["Revision",m.revision],
-    ["Source PDF",m.sourcePDF],
-    ["PDF Sheet",m.sheet]
-   ];
-   metadata.forEach((row,idx)=>{
-    const r=ws.getRow(idx+2);
-    r.getCell(1).value=row[0];
-    r.getCell(2).value=row[1];
-    r.getCell(1).font={bold:true};
-    r.getCell(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"E8F1EB"}};
-    r.getCell(2).font={bold:true};
-    if(row[1]==="Needs Confirmation"){
-      r.getCell(2).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF2CC"}};
-    }
-   });
-
-   ws.addRow([]);
-   const headerRow=ws.addRow([
-    "Balloon No","Characteristic","Nominal","Unit","+ Tol","- Tol",
-    "Upper Limit","Lower Limit","Actual","Result"
-   ]);
-   headerRow.font={bold:true};
-   headerRow.fill={type:"pattern",pattern:"solid",fgColor:{argb:"E8F1EB"}};
-
-   s.dimensions.forEach(d=>{
-    ws.addRow([
-     d.no,d.type+" — "+d.raw,d.nominal,d.unit,d.plus,d.minus,
-     d.upper,d.lower,"",""
-    ]);
-   });
-
-   ws.columns=[
-    {width:13},{width:34},{width:12},{width:10},{width:10},
-    {width:10},{width:14},{width:14},{width:14},{width:14}
-   ];
-   ws.views=[{state:"frozen",ySplit:9}];
-  });
-
-  const bytes=await wb.xlsx.writeBuffer();
-  download(
-   new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),
-   sourceName+"_INSPECTION_REPORT.xlsx"
-  );
-  progress(100,"Inspection Excel downloaded with drawing metadata and traceability.");
- }catch(e){
-  console.error(e);
-  progress(0,"Excel export error: "+e.message);
- }
-};
-
-function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
-function script(src){return new Promise((ok,no)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s)})}
-
-function download(blob,name){
- // Native Android app: save generated PDF/XLSX through the Java bridge.
- if(window.Android && typeof Android.saveBlob === "function"){
-  blob.arrayBuffer().then(buffer=>{
-   const bytes=new Uint8Array(buffer);
-   let binary="";
-   const chunk=0x8000;
-   for(let i=0;i<bytes.length;i+=chunk){
-    binary+=String.fromCharCode(...bytes.subarray(i,i+chunk));
-   }
-   Android.saveBlob("data:"+(blob.type||"application/octet-stream")+";base64,"+btoa(binary),name);
-  }).catch(error=>{
-   console.error(error);
-   alert("Could not save file: "+error.message);
-  });
-  return;
- }
- // Normal browser fallback.
- const url=URL.createObjectURL(blob);
- const a=document.createElement("a");
- a.href=url;
- a.download=name;
- document.body.appendChild(a);
- a.click();
- a.remove();
- setTimeout(()=>URL.revokeObjectURL(url),1500);
-}
-</script>
-</body>
-</html>
+  const bytes=await out.save();download
