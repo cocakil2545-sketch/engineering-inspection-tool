@@ -98,6 +98,7 @@ table{border-collapse:collapse;width:100%;font-size:11px;background:white;margin
  const gate=document.getElementById('licenseGate'),msg=document.getElementById('licenseMessage'),bar=document.getElementById('licenseStatusBar');
  if(!window.inspectiq){gate.classList.add('hidden');bar.style.display='none';return;}
  const show=(text,good=false)=>{msg.textContent=text;msg.className=good?'good':'';};
+ window.inspectiq.onLicenseInvalid(message=>{gate.classList.remove('hidden');show(message);bar.textContent='InspectIQ • License blocked';});
  try{
   const s=await window.inspectiq.licenseStatus();
   if(s.active){gate.classList.add('hidden');bar.textContent='InspectIQ • '+s.plan+' • Expires '+new Date(s.expiresAt).toLocaleDateString();}
