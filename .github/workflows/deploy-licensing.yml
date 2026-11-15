@@ -1,0 +1,46 @@
+name: Deploy InspectIQ Licensing API
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+      INSPECTIQ_ADMIN_TOKEN: ${{ secrets.INSPECTIQ_ADMIN_TOKEN }}
+      INSPECTIQ_SIGNING_PRIVATE_KEY: ${{ secrets.INSPECTIQ_SIGNING_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate deployment secrets
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_D1_DATABASE_ID"
+          test -n "$INSPECTIQ_ADMIN_TOKEN"
+          test -n "$INSPECTIQ_SIGNING_PRIVATE_KEY"
+      - name: Install Wrangler
+        run: npm install --global wrangler
+      - name: Configure account and D1 database
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const p = 'licensing/wrangler.toml';
+          let s = fs.readFileSync(p, 'utf8');
+          s = s.replace('REPLACE_WITH_D1_DATABASE_ID', process.env.CLOUDFLARE_D1_DATABASE_ID);
+          s = s.replace('compatibility_date = "2026-11-15"', 'compatibility_date = "2026-11-15"\\naccount_id = "' + process.env.CLOUDFLARE_ACCOUNT_ID + '"');
+          fs.writeFileSync(p, s);
+          NODE
+      - name: Apply database schema
+        run: wrangler d1 execute inspectiq-licenses --remote --file=licensing/schema.sql --config licensing/wrangler.toml
+      - name: Set private signing key
+        run: printf '%s' "$INSPECTIQ_SIGNING_PRIVATE_KEY" | wrangler secret put SIGNING_PRIVATE_KEY --config licensing/wrangler.toml
+      - name: Set administrator token
+        run: printf '%s' "$INSPECTIQ_ADMIN_TOKEN" | wrangler secret put ADMIN_TOKEN --config licensing/wrangler.toml
+      - name: Deploy Worker
+        run: wrangler deploy --config licensing/wrangler.toml

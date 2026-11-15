@@ -1,0 +1,54 @@
+name: Build InspectIQ Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [windows-desktop-licensing]
+
+concurrency:
+  group: inspectiq-windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package.json
+      - name: Download matching PDF.js worker
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs" -OutFile "app/src/main/assets/pdf.worker.min.mjs"
+      - name: Prepare desktop renderer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force desktop/renderer | Out-Null
+          Copy-Item app/src/main/assets/* desktop/renderer/ -Force
+          Copy-Item app/src/main/assets/index.html desktop/renderer/index.html -Force
+      - name: Configure desktop renderer entry
+        shell: pwsh
+        run: |
+          (Get-Content desktop/renderer/index.html -Raw).Replace('downloadd(new Blob','download(new Blob') | Set-Content desktop/renderer/index.html -NoNewline
+      - name: Check JavaScript syntax
+        shell: pwsh
+        run: |
+          node --check desktop/main.cjs
+          node --check desktop/preload.cjs
+          Get-Content licensing/src/index.js -Raw | node --input-type=module --check
+      - name: Install and build
+        working-directory: desktop
+        run: |
+          npm install
+          npm run dist:win
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: InspectIQ-Windows-Installer
+          path: desktop/dist/*.exe
+          if-no-files-found: error

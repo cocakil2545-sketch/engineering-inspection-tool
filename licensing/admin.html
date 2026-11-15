@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>InspectIQ License Admin</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f6f4;color:#172019;font:15px Arial,sans-serif}.wrap{max-width:1100px;margin:35px auto;padding:18px}.card{background:white;border:1px solid #dce4df;border-radius:14px;padding:20px;margin:14px 0}h1{margin:0 0 8px}label{display:block;font-weight:bold;font-size:13px;margin:12px 0 5px}input,select{padding:11px;border:1px solid #ccd8d0;border-radius:8px;width:100%;font:inherit}button{background:#23a859;color:white;border:0;border-radius:8px;padding:9px 12px;font-weight:bold;margin:4px 3px 4px 0;cursor:pointer}.secondary{background:#eaf2ed;color:#1c5b36}.danger{background:#fff0f0;color:#a22}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.status{font-size:13px;color:#536159;margin-top:10px;white-space:pre-wrap}table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:9px;border-bottom:1px solid #e1e8e3;text-align:left;overflow-wrap:anywhere}th{background:#eef4f0}@media(max-width:650px){.grid{grid-template-columns:1fr}}
+</style></head><body><div class="wrap">
+<h1>InspectIQ License Administration</h1><p>Create customer accounts, issue license terms and manage device activations.</p>
+<div class="card"><label>Licensing API URL</label><input id="api" placeholder="https://your-worker.workers.dev"><label>Administrator API token</label><input id="token" type="password" placeholder="ADMIN_TOKEN"><button id="connect">Connect</button><div id="status" class="status">Enter your deployed API URL and admin token.</div></div>
+<div class="grid">
+<div class="card"><h3>Create customer</h3><label>Username / email</label><input id="username"><label>Temporary password (minimum 8 characters)</label><input id="password" type="password"><label>Email (optional)</label><input id="email"><button id="createCustomer">Create account</button><div id="customerStatus" class="status"></div></div>
+<div class="card"><h3>Issue license</h3><label>Customer username</label><input id="licenseUser"><label>License term</label><select id="plan"><option value="1_YEAR">1 year</option><option value="2_YEAR">2 years</option><option value="3_YEAR">3 years</option><option value="5_YEAR">5 years</option><option value="TRIAL">7-day trial</option></select><button id="issueLicense">Generate license key</button><div id="licenseStatus" class="status"></div></div>
+</div>
+<div class="card"><h3>Customer licenses and device activations</h3><button id="refresh" class="secondary">Refresh list</button><div style="overflow:auto"><table><thead><tr><th>Customer</th><th>License key</th><th>Plan</th><th>Status</th><th>Expires</th><th>Device ID</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+</div>
+<script>
+let api="",token="";
+const el=id=>document.getElementById(id);
+async function call(route,method="GET",body){
+ const response=await fetch(api+route,{method,headers:{"content-type":"application/json","authorization":"Bearer "+token},body:body?JSON.stringify(body):undefined});
+ const data=await response.json();if(!response.ok)throw Error(data.error||"Request failed");return data;
+}
+async function loadLicenses(){
+ const data=await call("/api/admin/licenses");
+ el("rows").innerHTML=data.licenses.map(x=>"<tr><td>"+esc(x.username)+"</td><td>"+esc(x.license_key)+"</td><td>"+esc(x.plan)+"</td><td>"+esc(x.status)+"</td><td>"+new Date(x.expires_at).toLocaleDateString()+"</td><td>"+esc(x.device_id||"Not activated")+"</td><td><button class='secondary' data-release='"+esc(x.license_key)+"'>Release device</button><button class='danger' data-revoke='"+esc(x.license_key)+"'>Revoke</button></td></tr>").join("");
+ el("status").textContent="Loaded "+data.licenses.length+" license records.";
+}
+el("connect").addEventListener("click",async()=>{
+ api=el("api").value.trim().replace(/\/$/,"");token=el("token").value;
+ try{await loadLicenses()}catch(e){el("status").textContent=e.message}
+});
+el("createCustomer").addEventListener("click",async()=>{
+ try{const d=await call("/api/admin/customers","POST",{username:el("username").value,password:el("password").value,email:el("email").value});el("customerStatus").textContent="Created account: "+d.username;el("licenseUser").value=d.username}
+ catch(e){el("customerStatus").textContent=e.message}
+});
+el("issueLicense").addEventListener("click",async()=>{
+ try{const d=await call("/api/admin/licenses","POST",{username:el("licenseUser").value,plan:el("plan").value});el("licenseStatus").textContent="License key: "+d.licenseKey+"\nExpires: "+new Date(d.expiresAt).toLocaleString();await loadLicenses()}
+ catch(e){el("licenseStatus").textContent=e.message}
+});
+el("refresh").addEventListener("click",()=>loadLicenses().catch(e=>el("status").textContent=e.message));
+el("rows").addEventListener("click",async event=>{
+ const release=event.target.closest("[data-release]"),revoke=event.target.closest("[data-revoke]");
+ if(release){if(!confirm("Release this license from its current device?"))return;try{const d=await call("/api/admin/activations/release","POST",{licenseKey:release.dataset.release});el("status").textContent=d.message;await loadLicenses()}catch(e){el("status").textContent=e.message}}
+ if(revoke){if(!confirm("Permanently revoke this license?"))return;try{const d=await call("/api/admin/licenses/revoke","POST",{licenseKey:revoke.dataset.revoke});el("status").textContent=d.message;await loadLicenses()}catch(e){el("status").textContent=e.message}}
+});
+function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+</script></body></html>
