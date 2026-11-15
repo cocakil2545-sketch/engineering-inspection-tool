@@ -86,10 +86,15 @@ export default {
       if (!license) {
         const any=await env.DB.prepare("SELECT COUNT(*) AS n FROM licenses WHERE user_id=?").bind(user.id).first();
         if (any.n>0) return json({error:"Your license has expired. Enter a renewed license key."},403);
+        const priorTrial=await env.DB.prepare("SELECT device_id FROM trial_devices WHERE device_id=?").bind(deviceId).first();
+        if (priorTrial) return json({error:"A free trial has already been activated on this computer."},409);
         license=await createLicense(env.DB,user,"TRIAL",7);
+        await env.DB.prepare("INSERT INTO trial_devices (device_id,used_at) VALUES (?,?)").bind(deviceId,now()).run();
       }
     }
     if (license.status!=="ACTIVE" || license.expires_at<=now()) return json({error:"This license has expired or been revoked."},403);
+    const accountActivation=await env.DB.prepare("SELECT a.device_id FROM activations a JOIN licenses l ON l.id=a.license_id WHERE l.user_id=? LIMIT 1").bind(user.id).first();
+    if (accountActivation && accountActivation.device_id!==deviceId) return json({error:"This customer account is already activated on another computer. Contact the InspectIQ administrator for a device transfer."},409);
     const activation=await env.DB.prepare("SELECT * FROM activations WHERE license_id=?").bind(license.id).first();
     if (activation && activation.device_id!==deviceId) return json({error:"This license is already activated on another computer. Contact the InspectIQ administrator for a device transfer."},409);
     if (!activation) {
@@ -141,9 +146,9 @@ export default {
     }
     if (request.method==="POST" && route==="/api/admin/activations/release") {
       const body=await request.json(), key=String(body.licenseKey||"").trim();
-      const license=await env.DB.prepare("SELECT id FROM licenses WHERE license_key=?").bind(key).first();
+      const license=await env.DB.prepare("SELECT user_id FROM licenses WHERE license_key=?").bind(key).first();
       if (!license) return json({error:"License key not found."},404);
-      await env.DB.prepare("DELETE FROM activations WHERE license_id=?").bind(license.id).run();
+      await env.DB.prepare("DELETE FROM activations WHERE license_id IN (SELECT id FROM licenses WHERE user_id=?)").bind(license.user_id).run();
       return json({ok:true,message:"Device activation released. The customer can activate this license on another computer."});
     }
     if (request.method==="GET" && route==="/api/admin/licenses") {
