@@ -29,3 +29,8 @@ CREATE TABLE IF NOT EXISTS activations (
 
 CREATE INDEX IF NOT EXISTS idx_licenses_user ON licenses(user_id);
 CREATE INDEX IF NOT EXISTS idx_licenses_key ON licenses(license_key);
+
+CREATE TABLE IF NOT EXISTS trial_devices (
+  device_id TEXT PRIMARY KEY,
+  used_at INTEGER NOT NULL
+);
