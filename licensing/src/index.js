@@ -133,6 +133,19 @@ export default {
       const license=await createLicense(env.DB,user,plan,days);
       return json({licenseKey:license.license_key,plan:license.plan,expiresAt:license.expires_at},201);
     }
+    if (request.method==="POST" && route==="/api/admin/licenses/revoke") {
+      const body=await request.json(), key=String(body.licenseKey||"").trim();
+      const result=await env.DB.prepare("UPDATE licenses SET status='REVOKED' WHERE license_key=?").bind(key).run();
+      if (!result.meta.changes) return json({error:"License key not found."},404);
+      return json({ok:true,message:"License revoked. Offline copies remain usable only until their signed certificate expires."});
+    }
+    if (request.method==="POST" && route==="/api/admin/activations/release") {
+      const body=await request.json(), key=String(body.licenseKey||"").trim();
+      const license=await env.DB.prepare("SELECT id FROM licenses WHERE license_key=?").bind(key).first();
+      if (!license) return json({error:"License key not found."},404);
+      await env.DB.prepare("DELETE FROM activations WHERE license_id=?").bind(license.id).run();
+      return json({ok:true,message:"Device activation released. The customer can activate this license on another computer."});
+    }
     if (request.method==="GET" && route==="/api/admin/licenses") {
       const result=await env.DB.prepare("SELECT u.username,l.license_key,l.plan,l.status,l.created_at,l.expires_at,a.device_id,a.activated_at FROM licenses l JOIN users u ON u.id=l.user_id LEFT JOIN activations a ON a.license_id=l.id ORDER BY l.created_at DESC LIMIT 500").all();
       return json({licenses:result.results||[]});
