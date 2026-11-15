@@ -16,7 +16,9 @@
   "build": {
     "appId": "com.inspectiq.desktop",
     "productName": "InspectIQ",
-    "directories": { "output": "dist" },
+    "directories": {
+      "output": "dist"
+    },
     "files": [
       "main.cjs",
       "preload.cjs",
@@ -24,7 +26,14 @@
       "renderer/**/*"
     ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "InspectIQ-Setup-${version}.${ext}"
     },
     "nsis": {
@@ -34,5 +43,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "InspectIQ"
     }
+  },
+  "dependencies": {
+    "node-machine-id": "^1.1.12"
   }
 }
