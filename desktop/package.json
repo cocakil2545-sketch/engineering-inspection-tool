@@ -1,0 +1,38 @@
+{
+  "name": "inspectiq-desktop",
+  "version": "0.9.0",
+  "description": "InspectIQ engineering drawing inspection for Windows",
+  "main": "main.cjs",
+  "author": "InspectIQ",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.inspectiq.desktop",
+    "productName": "InspectIQ",
+    "directories": { "output": "dist" },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "license-config.json",
+      "renderer/**/*"
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "InspectIQ-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "InspectIQ"
+    }
+  }
+}
