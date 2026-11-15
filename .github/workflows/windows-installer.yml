@@ -35,6 +35,12 @@ jobs:
         shell: pwsh
         run: |
           (Get-Content desktop/renderer/index.html -Raw).Replace('downloadd(new Blob','download(new Blob') | Set-Content desktop/renderer/index.html -NoNewline
+      - name: Check JavaScript syntax
+        shell: pwsh
+        run: |
+          node --check desktop/main.cjs
+          node --check desktop/preload.cjs
+          Get-Content licensing/src/index.js -Raw | node --input-type=module --check
       - name: Install and build
         working-directory: desktop
         run: |
