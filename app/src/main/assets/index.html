@@ -96,6 +96,7 @@ table{border-collapse:collapse;width:100%;font-size:11px;background:white;margin
 <script>
 (async()=>{
  const gate=document.getElementById('licenseGate'),msg=document.getElementById('licenseMessage'),bar=document.getElementById('licenseStatusBar');
+ if(!window.inspectiq){gate.classList.add('hidden');bar.style.display='none';return;}
  const show=(text,good=false)=>{msg.textContent=text;msg.className=good?'good':'';};
  try{
   const s=await window.inspectiq.licenseStatus();
@@ -426,7 +427,7 @@ $("pdfBtn").onclick=async()=>{
     });
    }
   }
-  const bytes=await out.save();downloadd(new Blob([bytes],{type:"application/pdf"}),sourceName+"_BALLOONED.pdf");
+  const bytes=await out.save();download(new Blob([bytes],{type:"application/pdf"}),sourceName+"_BALLOONED.pdf");
   progress(100,"Ballooned PDF downloaded — all original sheets retained in order.");
  }catch(e){console.error(e);progress(0,"PDF export error: "+e.message)}
 };
