@@ -5,6 +5,10 @@ on:
   push:
     branches: [windows-desktop-licensing]
 
+concurrency:
+  group: inspectiq-windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
