@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Engineering Drawing Balloon & Inspection Report</title>
+<title>InspectIQ — Engineering Drawing Inspection</title>
 <style>
 :root{--g:#23A859;--dark:#101711;--bg:#f4f7f5;--line:#dce4df;--muted:#68736c;--red:#d51f2f}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Inter,Arial,sans-serif;color:#172019}
@@ -26,10 +26,17 @@ table{border-collapse:collapse;width:100%;font-size:11px;background:white;margin
 .leader{position:absolute;height:2px;background:#d51f2f;transform-origin:0 50%;z-index:1;pointer-events:none}
 .balloon{z-index:2}
 @media(max-width:900px){.grid{grid-template-columns:1fr}main{padding:10px}.buttons{grid-template-columns:1fr}}
+
+#licenseGate{position:fixed;inset:0;z-index:9999;background:rgba(10,18,13,.78);display:flex;align-items:center;justify-content:center;padding:20px}
+#licenseGate.hidden{display:none}#licenseGate .gateCard{width:min(460px,100%);background:#fff;border-radius:18px;padding:28px;box-shadow:0 25px 90px #0005}
+#licenseGate h2{margin:0 0 8px;font-size:24px}#licenseGate p{color:#637067;font-size:13px;line-height:1.5}
+#licenseGate label{margin-top:14px}#licenseGate input{padding:12px}#licenseGate button{width:100%;margin-top:14px;padding:13px}
+#licenseMessage{font-size:12px;color:#a33;margin-top:10px;min-height:18px}#licenseMessage.good{color:#187342}
+#licenseStatusBar{position:fixed;right:12px;bottom:10px;z-index:10;background:#102016;color:#d9eee0;border-radius:20px;padding:6px 10px;font-size:10px;opacity:.9}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>Engineering Drawing Balloon & Inspection Report</h1><div class="sub">Detects title-block Part Name/No., Drawing No. and Revision; preserves PDF order; creates traceability and part-number worksheets.</div></div></header>
+<header><div class="wrap"><h1>InspectIQ</h1><div class="sub">Detects title-block Part Name/No., Drawing No. and Revision; preserves PDF order; creates traceability and part-number worksheets.</div></div></header>
 
 <main class="wrap">
 <div class="grid">
@@ -70,6 +77,41 @@ table{border-collapse:collapse;width:100%;font-size:11px;background:white;margin
 </section>
 </div>
 </main>
+
+
+<div id="licenseGate">
+ <div class="gateCard">
+  <div style="color:#23A859;font-size:12px;font-weight:800;letter-spacing:2px;margin-bottom:12px">INSPECTIQ LICENSE ACTIVATION</div>
+  <h2>Welcome to InspectIQ</h2>
+  <p>Sign in to activate this computer. New customers can leave the license key blank to start their 7-day free trial. Each license can be activated on one Windows computer.</p>
+  <label for="iqUsername">Username or email</label><input id="iqUsername" autocomplete="username" placeholder="Your account username">
+  <label for="iqPassword">Password</label><input id="iqPassword" type="password" autocomplete="current-password" placeholder="Account password">
+  <label for="iqLicenseKey">License key <span style="font-weight:400;color:#778279">(optional for free trial)</span></label><input id="iqLicenseKey" placeholder="IQ-XXXX-XXXX-XXXX">
+  <button class="primary" id="iqActivate">Activate / Start free trial</button>
+  <div id="licenseMessage">Internet is required for first activation. After activation, drawing inspection works offline until expiry.</div>
+ </div>
+</div>
+<div id="licenseStatusBar">InspectIQ • License status checking</div>
+
+<script>
+(async()=>{
+ const gate=document.getElementById('licenseGate'),msg=document.getElementById('licenseMessage'),bar=document.getElementById('licenseStatusBar');
+ const show=(text,good=false)=>{msg.textContent=text;msg.className=good?'good':'';};
+ try{
+  const s=await window.inspectiq.licenseStatus();
+  if(s.active){gate.classList.add('hidden');bar.textContent='InspectIQ • '+s.plan+' • Expires '+new Date(s.expiresAt).toLocaleDateString();}
+  else{gate.classList.remove('hidden');bar.textContent='InspectIQ • Not activated';if(s.error)show(s.error);}
+ }catch(e){gate.classList.remove('hidden');show('License check failed: '+e.message);}
+ document.getElementById('iqActivate').addEventListener('click',async()=>{
+  const btn=document.getElementById('iqActivate');btn.disabled=true;btn.textContent='Connecting…';show('Contacting InspectIQ licensing server…');
+  try{
+   const result=await window.inspectiq.activate({username:document.getElementById('iqUsername').value,password:document.getElementById('iqPassword').value,licenseKey:document.getElementById('iqLicenseKey').value});
+   gate.classList.add('hidden');bar.textContent='InspectIQ • '+result.plan+' • Expires '+new Date(result.expiresAt).toLocaleDateString();
+  }catch(e){show(e.message);}
+  finally{btn.disabled=false;btn.textContent='Activate / Start free trial';}
+ });
+})();
+</script>
 
 <script type="module">
 import * as pdfjsLib from "./pdf.min.js";
