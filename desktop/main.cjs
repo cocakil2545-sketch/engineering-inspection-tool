@@ -15,6 +15,8 @@ if (!SINGLE_INSTANCE) app.quit();
 let mainWindow;
 let deviceId;
 let apiBaseUrl = "";
+let lastClockValue = Date.now();
+let clockTamperDetected = false;
 
 function readConfig() {
   try {
@@ -35,6 +37,36 @@ function getDeviceId() {
 function licensePath() {
   return path.join(app.getPath("userData"), "license.dat");
 }
+function clockPath() {
+  return path.join(app.getPath("userData"), "clock.dat");
+}
+function validateClock() {
+  const current = Date.now();
+  if (!safeStorage.isEncryptionAvailable()) throw new Error("Windows secure storage is unavailable.");
+  if (fs.existsSync(clockPath())) {
+    const previous = Number(safeStorage.decryptString(fs.readFileSync(clockPath())));
+    if (Number.isFinite(previous) && current + 120000 < previous) {
+      clockTamperDetected = true;
+      throw new Error("System clock rollback detected. Correct the Windows date and time, then restart InspectIQ.");
+    }
+  }
+  lastClockValue = current;
+  fs.writeFileSync(clockPath(), safeStorage.encryptString(String(current)));
+}
+function monitorClock() {
+  const current = Date.now();
+  if (current + 60000 < lastClockValue) {
+    clockTamperDetected = true;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("license:invalid", "System clock rollback detected. Correct the Windows date and time, then restart InspectIQ.");
+    }
+    return;
+  }
+  if (current > lastClockValue) {
+    lastClockValue = current;
+    try { fs.writeFileSync(clockPath(), safeStorage.encryptString(String(current))); } catch (_) {}
+  }
+}
 
 function decodeCertificate(cert) {
   if (!cert || typeof cert !== "string") throw new Error("No activation certificate found.");
@@ -54,6 +86,8 @@ function decodeCertificate(cert) {
 
 function loadSavedLicense() {
   try {
+    if (clockTamperDetected) throw new Error("System clock rollback detected. Correct the Windows date and time, then restart InspectIQ.");
+    validateClock();
     if (!fs.existsSync(licensePath())) return null;
     if (!safeStorage.isEncryptionAvailable()) throw new Error("Windows secure storage is unavailable.");
     const encrypted = fs.readFileSync(licensePath());
@@ -154,6 +188,7 @@ function createWindow() {
 app.whenReady().then(() => {
   readConfig();
   createWindow();
+  setInterval(monitorClock, 30000).unref();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on("second-instance", () => {
